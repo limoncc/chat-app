@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.chatapp.desktop",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "beforeDevCommand": "npm run build",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "security": {
