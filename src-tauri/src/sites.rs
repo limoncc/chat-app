@@ -2,6 +2,8 @@ use tauri::{LogicalPosition, LogicalSize};
 
 /// 顶部标签栏高度（逻辑像素），与 macOS 标题栏高度接近，融入窗口框架。
 /// 内容 webview 从该高度下方开始铺满窗口。
+// macOS 用原生标题栏按钮，无 webview 标签栏，此常量仅非 macOS 平台使用。
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub const TAB_BAR_HEIGHT: f64 = 32.0;
 
 /// 默认激活的站点 key（与前端 src/tabs.js 的 DEFAULT_TAB 保持一致）。
@@ -49,16 +51,20 @@ pub fn site_by_key(key: &str) -> Option<&'static Site> {
     sites().iter().find(|s| s.key == key)
 }
 
-/// 计算内容区 webview 的位置与尺寸：顶部标签栏之下铺满窗口。
-/// 窗口尺寸为负或高度不足标签栏时钳制为 0，避免非法布局。
-pub fn content_bounds(win_w: f64, win_h: f64) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+/// 计算内容区 webview 的位置与尺寸：从 y_offset 之下铺满窗口。
+/// - macOS 用原生标题栏按钮，无 webview 标签栏，offset 为 0；
+/// - 其它平台有 webview 标签栏，offset 为 TAB_BAR_HEIGHT。
+/// 窗口尺寸为负或高度不足 offset 时钳制为 0，避免非法布局。
+pub fn content_bounds(y_offset: f64, win_w: f64, win_h: f64) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let w = win_w.max(0.0);
-    let h = (win_h - TAB_BAR_HEIGHT).max(0.0);
-    (LogicalPosition::new(0.0, TAB_BAR_HEIGHT), LogicalSize::new(w, h))
+    let h = (win_h - y_offset).max(0.0);
+    (LogicalPosition::new(0.0, y_offset), LogicalSize::new(w, h))
 }
 
 /// 计算顶部标签栏 webview 的位置与尺寸：占满窗口宽度、固定高度；
 /// 窗口高度不足标签栏高度时高度钳制为窗口高度。
+// macOS 用原生标题栏按钮，无 webview 标签栏，此函数仅非 macOS 平台使用。
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn tab_bounds(win_w: f64, win_h: f64) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let w = win_w.max(0.0);
     let h = TAB_BAR_HEIGHT.min(win_h.max(0.0));
@@ -94,21 +100,25 @@ mod tests {
     }
 
     #[test]
-    fn content_bounds_offsets_by_tab_bar_height() {
-        let (pos, size) = content_bounds(1200.0, 800.0);
+    fn content_bounds_offsets_by_given_offset() {
+        let (pos, size) = content_bounds(TAB_BAR_HEIGHT, 1200.0, 800.0);
         assert_eq!(pos.x, 0.0);
         assert_eq!(pos.y, TAB_BAR_HEIGHT);
         assert_eq!(size.width, 1200.0);
         assert_eq!(size.height, 800.0 - TAB_BAR_HEIGHT);
+        // offset 为 0 时内容铺满全窗口（macOS 无标签栏）
+        let (pos0, size0) = content_bounds(0.0, 1200.0, 800.0);
+        assert_eq!(pos0.y, 0.0);
+        assert_eq!(size0.height, 800.0);
     }
 
     #[test]
     fn content_bounds_clamps_when_window_too_small() {
-        // 高度不足标签栏
-        let (_, size) = content_bounds(800.0, 20.0);
+        // 高度不足 offset
+        let (_, size) = content_bounds(TAB_BAR_HEIGHT, 800.0, 20.0);
         assert_eq!(size.height, 0.0);
         // 负宽度
-        let (_, size2) = content_bounds(-10.0, 100.0);
+        let (_, size2) = content_bounds(TAB_BAR_HEIGHT, -10.0, 100.0);
         assert_eq!(size2.width, 0.0);
     }
 

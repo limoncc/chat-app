@@ -1,5 +1,8 @@
 mod sites;
 
+#[cfg(target_os = "macos")]
+mod mac_titlebar;
+
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     Arc,
@@ -87,25 +90,29 @@ fn report_theme(window: tauri::Webview, theme: String, state: tauri::State<'_, A
     });
 }
 
-/// Tauri command: called from the tab bar (local page) when the user clicks a
-/// tab. Lazily creates the target site's webview on first switch, then shows it
-/// while hiding every other content webview — each site keeps its page state and
-/// session, so switching never requires re-login.
-#[tauri::command]
-fn activate_tab(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, ActiveTab>,
-    tab: String,
-) -> Result<(), String> {
-    let site = sites::site_by_key(&tab).ok_or_else(|| format!("unknown tab: {tab}"))?;
+/// 内容区 webview 的 y 偏移：macOS 用原生标题栏按钮（无 webview 标签栏），
+/// 其它平台有 webview 标签栏。
+#[cfg(target_os = "macos")]
+fn content_offset() -> f64 {
+    0.0
+}
+#[cfg(not(target_os = "macos"))]
+fn content_offset() -> f64 {
+    sites::TAB_BAR_HEIGHT
+}
+
+/// 切换到指定站点：懒加载其 webview 并显隐切换。macOS 原生标题栏按钮与
+/// 其它平台的 webview 标签栏共用此逻辑，保证各站会话保持、切换不重新登录。
+fn switch_tab(app: &tauri::AppHandle, tab: &str) -> Result<(), String> {
+    let site = sites::site_by_key(tab).ok_or_else(|| format!("unknown tab: {tab}"))?;
     let window = app.get_window("main").ok_or("main window not found")?;
 
     // Lazy-load: create the target site's webview on first switch.
-    if window.get_webview(&tab).is_none() {
+    if window.get_webview(tab).is_none() {
         let phys = window.inner_size().map_err(|e| e.to_string())?;
         let scale = window.scale_factor().map_err(|e| e.to_string())?;
         let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
-        let (pos, size) = sites::content_bounds(w, h);
+        let (pos, size) = sites::content_bounds(content_offset(), w, h);
         window
             .add_child(
                 WebviewBuilder::new(
@@ -120,11 +127,18 @@ fn activate_tab(
             .map_err(|e| e.to_string())?;
     }
 
-    *state.0.lock().unwrap() = tab;
+    *app.state::<ActiveTab>().0.lock().unwrap() = tab.to_string();
     let _ = window.set_title(site.title);
     apply_tab_visibility(&window);
 
     Ok(())
+}
+
+/// Tauri command: called from the tab bar (local page, non-macOS platforms)
+/// when the user clicks a tab.
+#[tauri::command]
+fn activate_tab(app: tauri::AppHandle, tab: String) -> Result<(), String> {
+    switch_tab(&app, &tab)
 }
 
 /// Tauri command: window controls used by the toolbar. Kept for the
@@ -210,7 +224,7 @@ fn apply_tab_visibility(window: &tauri::Window) {
     };
     let scale = window.scale_factor().unwrap_or(1.0);
     let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
-    let (pos, size) = sites::content_bounds(w, h);
+    let (pos, size) = sites::content_bounds(content_offset(), w, h);
     let hidden = tauri::LogicalPosition::new(0.0, -10000.0);
 
     for site in sites::sites() {
@@ -225,20 +239,24 @@ fn apply_tab_visibility(window: &tauri::Window) {
     }
 }
 
-/// Sync all webviews to the window's current size: the tabbar stays at the top
-/// (height = TAB_BAR_HEIGHT), content webviews follow the active tab.
+/// Sync all webviews to the window's current size: the webview tabbar (non-macOS)
+/// stays at the top (height = TAB_BAR_HEIGHT), content webviews follow the active tab.
 fn relayout(window: &tauri::Window) {
-    let Ok(phys) = window.inner_size() else {
-        return;
-    };
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
-    let (tab_pos, tab_size) = sites::tab_bounds(w, h);
-
-    if let Some(wv) = window.get_webview("tabbar") {
-        let _ = wv.set_position(tab_pos);
-        let _ = wv.set_size(tab_size);
+    // macOS 用原生标题栏按钮，无 webview 标签栏。
+    #[cfg(not(target_os = "macos"))]
+    {
+        let Ok(phys) = window.inner_size() else {
+            return;
+        };
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
+        let (tab_pos, tab_size) = sites::tab_bounds(w, h);
+        if let Some(wv) = window.get_webview("tabbar") {
+            let _ = wv.set_position(tab_pos);
+            let _ = wv.set_size(tab_size);
+        }
     }
+
     apply_tab_visibility(window);
 }
 
@@ -291,10 +309,12 @@ pub fn run() {
                 .title_bar_style(tauri::TitleBarStyle::Transparent);
             let window = window_builder.build()?;
 
-            // --- Tab bar webview (local page, fixed height at the top) ---
             let phys = window.inner_size()?;
             let scale = window.scale_factor()?;
             let (win_w, win_h) = (phys.width as f64 / scale, phys.height as f64 / scale);
+
+            // --- Webview tab bar (local page) --- 仅非 macOS；macOS 用原生标题栏按钮。
+            #[cfg(not(target_os = "macos"))]
             window.add_child(
                 WebviewBuilder::new("tabbar", WebviewUrl::App("index.html".into()))
                     .zoom_hotkeys_enabled(true),
@@ -311,11 +331,15 @@ pub fn run() {
                 )
                 .initialization_script(THEME_DETECT_SCRIPT)
                 .zoom_hotkeys_enabled(true),
-                sites::content_bounds(win_w, win_h).0,
-                sites::content_bounds(win_w, win_h).1,
+                sites::content_bounds(content_offset(), win_w, win_h).0,
+                sites::content_bounds(content_offset(), win_w, win_h).1,
             )?;
 
             apply_window_theme(&window, default_site.theme);
+
+            // --- macOS: native titlebar buttons for tab switching ---
+            #[cfg(target_os = "macos")]
+            mac_titlebar::setup(app, &window)?;
 
             // --- App menu bar (macOS) ---
             #[cfg(target_os = "macos")]
