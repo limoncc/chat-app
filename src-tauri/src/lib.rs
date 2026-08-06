@@ -151,11 +151,12 @@ fn window_control(app: tauri::AppHandle, action: String) -> Result<(), String> {
 }
 
 /// Hide the macOS traffic lights so the window is fully frameless; the custom
-/// toolbar renders its own window controls instead.
+/// toolbar renders its own window controls instead. Must be called after the
+/// window is fully loaded (RunEvent::Ready), otherwise the buttons are nil.
 #[cfg(target_os = "macos")]
 fn hide_traffic_lights(window: &tauri::Window) {
     use objc2::msg_send;
-    use objc2::runtime::NSObject;
+    use objc2::runtime::{Bool, NSObject};
     use objc2_app_kit::NSWindowButton;
 
     let Ok(nswin) = window.ns_window() else {
@@ -172,7 +173,7 @@ fn hide_traffic_lights(window: &tauri::Window) {
     ] {
         let btn: *mut NSObject = unsafe { msg_send![nswin, standardWindowButton: button_type] };
         if !btn.is_null() {
-            let _: () = unsafe { msg_send![btn, setHidden: true] };
+            let _: () = unsafe { msg_send![btn, setHidden: Bool::YES] };
         }
     }
 }
@@ -343,10 +344,6 @@ pub fn run() {
 
             apply_window_theme(&window, default_site.theme);
 
-            // --- Hide the system title bar traffic lights (frameless window) ---
-            #[cfg(target_os = "macos")]
-            hide_traffic_lights(&window);
-
             // --- App menu bar (macOS) ---
             #[cfg(target_os = "macos")]
             {
@@ -475,13 +472,23 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {
+        .run(|app, event| {
             #[cfg(target_os = "macos")]
-            if let RunEvent::Reopen { .. } = _event {
-                if let Some(w) = _app.get_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
+            match event {
+                // App fully launched: window is ready, so hiding the traffic
+                // lights now is reliable.
+                RunEvent::Ready => {
+                    if let Some(w) = app.get_window("main") {
+                        hide_traffic_lights(&w);
+                    }
                 }
+                RunEvent::Reopen { .. } => {
+                    if let Some(w) = app.get_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
+                _ => {}
             }
         });
 }

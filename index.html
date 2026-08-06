@@ -115,6 +115,11 @@
     document.querySelectorAll(".wc").forEach((btn) => {
       btn.addEventListener("click", () => windowControl(btn.dataset.action));
     });
+
+    // 双击工具栏空白处最大化/还原，与原生标题栏行为一致。
+    document.getElementById("tabbar").addEventListener("dblclick", (e) => {
+      if (e.target.id === "tabbar") windowControl("toggle_maximize");
+    });
   </script>
 </body>
 </html>
