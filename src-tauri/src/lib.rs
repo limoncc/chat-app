@@ -1,3 +1,5 @@
+mod sites;
+
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     Arc,
