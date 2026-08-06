@@ -1,7 +1,8 @@
 use tauri::{LogicalPosition, LogicalSize};
 
-/// 顶部标签栏高度（逻辑像素）。内容 webview 从该高度下方开始铺满窗口。
-pub const TAB_BAR_HEIGHT: f64 = 44.0;
+/// 顶部标签栏高度（逻辑像素），与 macOS 标题栏高度接近，融入窗口框架。
+/// 内容 webview 从该高度下方开始铺满窗口。
+pub const TAB_BAR_HEIGHT: f64 = 32.0;
 
 /// 默认激活的站点 key（与前端 src/tabs.js 的 DEFAULT_TAB 保持一致）。
 pub const DEFAULT_KEY: &str = "deepseek";
