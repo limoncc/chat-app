@@ -1,11 +1,12 @@
 {
-  "name": "deepseek-app",
+  "name": "chat-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "build": "node -e \"var f=require('fs');f.mkdirSync('dist',{recursive:true});f.copyFileSync('index.html','dist/index.html')\""
+    "build": "node -e \"const f=require('fs');f.mkdirSync('dist/src',{recursive:true});f.copyFileSync('index.html','dist/index.html');f.cpSync('src','dist/src',{recursive:true})\"",
+    "test": "node --test \"src/**/*.test.js\""
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

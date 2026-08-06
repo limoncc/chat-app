@@ -1,17 +1,63 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ChatApp</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a2e;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    /* 顶部标签栏：固定 44px，与 Rust 侧 TAB_BAR_HEIGHT 保持一致 */
+    #tabbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      background: rgba(26, 26, 46, 0.94);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      -webkit-user-select: none;
+      -webkit-app-region: drag; /* 允许拖动窗口 */
+    }
+    .tab {
+      -webkit-app-region: no-drag;
+      padding: 6px 14px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+    }
+    .tab:hover { background: rgba(255, 255, 255, 0.06); color: #e5e7eb; }
+    .tab.active { background: rgba(255, 255, 255, 0.14); color: #fff; }
   </style>
 </head>
 <body>
-  <script>
-    window.location.replace('https://chat.deepseek.com');
+  <div id="tabbar"></div>
+  <script type="module">
+    import { SITES, DEFAULT_TAB, renderTabs, updateActiveTab, activateTab } from "./src/tabs.js";
+
+    const bar = document.getElementById("tabbar");
+    let active = DEFAULT_TAB;
+
+    renderTabs(bar, SITES, active, async (key) => {
+      if (key === active) return;
+      const res = await activateTab(key);
+      if (res.ok) active = key;
+      updateActiveTab(bar, active);
+    });
   </script>
 </body>
 </html>
