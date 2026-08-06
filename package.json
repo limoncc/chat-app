@@ -1,0 +1,13 @@
+{
+  "name": "deepseek-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "build": "node -e \"var f=require('fs');f.mkdirSync('dist',{recursive:true});f.copyFileSync('index.html','dist/index.html')\""
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

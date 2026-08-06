@@ -1,15 +1,13 @@
-# ChatApp
+封装了一个简单的deepseek客户端，方便不喜欢网页的朋友使用。
 
-单窗口桌面应用，整合 DeepSeek / ChatGLM / Zread 三个 AI 站点，顶部标签栏一键切换，各站会话与登录态独立保持（多 webview 常驻，切换不重新登录）。
+mac使用截图
 
-基于 Tauri v2 构建，代码基底来自 `deepseek_app`（旧三个项目不再维护，见 `.gitignore`）。
+![](docs/images/mac1.png)
 
-## 开发
+![](docs/images/mac2.png)
 
-```bash
-npm install          # 安装 @tauri-apps/cli
-npm test             # 前端标签栏逻辑单测 (node --test)
-cd src-tauri && cargo test   # Rust 单测
-cargo tauri dev      # 开发运行
-cargo tauri build    # 打包 (macOS .app/.dmg / Windows)
-```
+win使用截图
+
+![](docs/images/win1.png)
+
+![](docs/images/win2.png)
