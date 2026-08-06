@@ -7,7 +7,9 @@ use std::sync::{
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Listener, Manager, WebviewUrl, WebviewWindowBuilder,
+    window::WindowBuilder,
+    webview::WebviewBuilder,
+    Manager, WebviewUrl,
 };
 
 #[cfg(target_os = "macos")]
@@ -16,6 +18,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
+
+/// 当前激活的站点 key（由 activate_tab 更新，供主题/缩放按站点处理）。
+struct ActiveTab(std::sync::Mutex<String>);
 
 // Injected into every page load. Detects light/dark theme from <html> and <body>,
 // then reports it to Rust via Tauri's IPC bridge.
@@ -67,19 +72,24 @@ const THEME_DETECT_SCRIPT: &str = r#"
 "#;
 
 /// Tauri command: called from JS via invoke() to report theme changes.
-/// This is the primary mechanism; the event listener is kept as a fallback.
+/// Only the active tab's theme is applied to the window chrome, so a
+/// background webview's theme cannot override the visible window.
 #[tauri::command]
-fn report_theme(window: tauri::WebviewWindow, theme: String) {
-    // Must dispatch to main thread for NSAppearance/NSApp API
-    let w = window.clone();
-    let _ = window.run_on_main_thread(move || {
+fn report_theme(window: tauri::Webview, theme: String, state: tauri::State<'_, ActiveTab>) {
+    let active = state.0.lock().unwrap().clone();
+    if window.label() != active {
+        return;
+    }
+    let win = window.window();
+    let w = win.clone();
+    let _ = win.run_on_main_thread(move || {
         apply_window_theme(&w, &theme);
     });
 }
 
 /// Update the macOS window chrome to match the web page's theme.
 #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
-fn apply_window_theme(window: &tauri::WebviewWindow, theme: &str) {
+fn apply_window_theme(window: &tauri::Window, theme: &str) {
     #[cfg(target_os = "macos")]
     {
         use objc2::MainThreadMarker;
@@ -120,6 +130,29 @@ fn apply_window_theme(window: &tauri::WebviewWindow, theme: &str) {
     }
 }
 
+/// Sync all webviews to the window's current size. The tabbar sits at the top
+/// (height = TAB_BAR_HEIGHT) and every content webview fills the area below it.
+fn relayout(window: &tauri::Window) {
+    let Ok(phys) = window.inner_size() else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
+    let (tab_pos, tab_size) = sites::tab_bounds(w, h);
+    let (content_pos, content_size) = sites::content_bounds(w, h);
+
+    if let Some(wv) = window.get_webview("tabbar") {
+        let _ = wv.set_position(tab_pos);
+        let _ = wv.set_size(tab_size);
+    }
+    for site in sites::sites() {
+        if let Some(wv) = window.get_webview(site.key) {
+            let _ = wv.set_position(content_pos);
+            let _ = wv.set_size(content_size);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Track webview zoom level as percentage (100 = 100%)
@@ -129,23 +162,26 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .manage(ActiveTab(std::sync::Mutex::new(sites::DEFAULT_KEY.to_string())))
         .invoke_handler(tauri::generate_handler![report_theme])
         .on_menu_event(move |app, event| {
-            if let Some(window) = app.get_webview_window("main") {
+            let state = app.state::<ActiveTab>();
+            let active = state.0.lock().unwrap().clone();
+            if let Some(wv) = app.get_webview(&active) {
                 match event.id().as_ref() {
                     "zoom_in" => {
                         let new = (zoom_level.load(Ordering::Relaxed) + 10).min(500);
                         zoom_level.store(new, Ordering::Relaxed);
-                        let _ = window.set_zoom(new as f64 / 100.0);
+                        let _ = wv.set_zoom(new as f64 / 100.0);
                     }
                     "zoom_out" => {
                         let new = (zoom_level.load(Ordering::Relaxed).saturating_sub(10)).max(25);
                         zoom_level.store(new, Ordering::Relaxed);
-                        let _ = window.set_zoom(new as f64 / 100.0);
+                        let _ = wv.set_zoom(new as f64 / 100.0);
                     }
                     "zoom_reset" => {
                         zoom_level.store(100, Ordering::Relaxed);
-                        let _ = window.set_zoom(1.0);
+                        let _ = wv.set_zoom(1.0);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -153,43 +189,44 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            // Create the main window, loading DeepSeek directly + theme detection script
-            let window = WebviewWindowBuilder::new(
-                app,
-                "main",
-                WebviewUrl::External("https://chat.deepseek.com".parse().expect("invalid URL")),
-            )
-            .title("DeepSeek")
-            .inner_size(1200.0, 800.0)
-            .min_inner_size(400.0, 300.0);
+            // --- Create the main window (no built-in webview; everything is added via add_child) ---
+            #[allow(unused_mut)]
+            let mut window_builder = WindowBuilder::new(app, "main")
+                .title("ChatApp")
+                .inner_size(1200.0, 800.0)
+                .min_inner_size(400.0, 300.0)
+                .resizable(true);
             #[cfg(target_os = "macos")]
-            let window = window
+            let window_builder = window_builder
                 .hidden_title(true)
                 .title_bar_style(tauri::TitleBarStyle::Transparent);
-            let window = window
-            .resizable(true)
-            .zoom_hotkeys_enabled(true)
-            .initialization_script(THEME_DETECT_SCRIPT)
-            .build()?;
+            let window = window_builder.build()?;
 
-            // Default to dark; the web page's theme-changed event will correct it
-            apply_window_theme(&window, "dark");
+            // --- Tab bar webview (local page, fixed height at the top) ---
+            let phys = window.inner_size()?;
+            let scale = window.scale_factor()?;
+            let (win_w, win_h) = (phys.width as f64 / scale, phys.height as f64 / scale);
+            window.add_child(
+                WebviewBuilder::new("tabbar", WebviewUrl::App("index.html".into()))
+                    .zoom_hotkeys_enabled(true),
+                sites::tab_bounds(win_w, win_h).0,
+                sites::tab_bounds(win_w, win_h).1,
+            )?;
 
-            // Listen for theme changes emitted by the web page
-            let w = window.clone();
-            window.listen("theme-changed", move |event| {
-                let payload: serde_json::Value =
-                    serde_json::from_str(event.payload()).unwrap_or_default();
-                let theme = payload
-                    .get("theme")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("light")
-                    .to_string();
-                let w2 = w.clone();
-                let _ = w.run_on_main_thread(move || {
-                    apply_window_theme(&w2, &theme);
-                });
-            });
+            // --- Default content webview (lazy: other sites are created on first switch) ---
+            let default_site = sites::site_by_key(sites::DEFAULT_KEY).expect("default site must exist");
+            window.add_child(
+                WebviewBuilder::new(
+                    default_site.key,
+                    WebviewUrl::External(default_site.url.parse().expect("default site url")),
+                )
+                .initialization_script(THEME_DETECT_SCRIPT)
+                .zoom_hotkeys_enabled(true),
+                sites::content_bounds(win_w, win_h).0,
+                sites::content_bounds(win_w, win_h).1,
+            )?;
+
+            apply_window_theme(&window, default_site.theme);
 
             // --- App menu bar (macOS) ---
             #[cfg(target_os = "macos")]
@@ -231,10 +268,10 @@ pub fn run() {
 
                 let app_menu = Submenu::with_items(
                     app,
-                    "DeepSeek",
+                    "ChatApp",
                     true,
                     &[
-                        &PredefinedMenuItem::about(app, Some("About DeepSeek"), None)?,
+                        &PredefinedMenuItem::about(app, Some("About ChatApp"), None)?,
                         &PredefinedMenuItem::separator(app)?,
                         &PredefinedMenuItem::services(app, None::<&str>)?,
                         &PredefinedMenuItem::separator(app)?,
@@ -266,7 +303,7 @@ pub fn run() {
             }
 
             // --- System tray ---
-            let show = MenuItemBuilder::with_id("show", "Show DeepSeek").build(app)?;
+            let show = MenuItemBuilder::with_id("show", "Show ChatApp").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
 
@@ -281,7 +318,7 @@ pub fn run() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
+                        if let Some(w) = app.get_window("main") {
                             let _ = w.show();
                             let _ = w.set_focus();
                         }
@@ -297,7 +334,7 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("main") {
+                        if let Some(w) = app.get_window("main") {
                             let _ = w.show();
                             let _ = w.set_focus();
                         }
@@ -307,18 +344,22 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Resized(_) => {
+                relayout(window);
+            }
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.hide();
                 api.prevent_close();
             }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, _event| {
             #[cfg(target_os = "macos")]
             if let RunEvent::Reopen { .. } = _event {
-                if let Some(w) = _app.get_webview_window("main") {
+                if let Some(w) = _app.get_window("main") {
                     let _ = w.show();
                     let _ = w.set_focus();
                 }
