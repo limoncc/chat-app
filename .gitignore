@@ -1,0 +1,23 @@
+# 三个旧项目，不纳入版本控制
+/chatglm_app/
+/deepseek_app/
+/zread_app/
+
+# Node
+node_modules/
+
+# Rust / Tauri 构建产物
+target/
+src-tauri/target/
+
+# 前端构建产物
+dist/
+
+# 移动端生成物
+src-tauri/gen/apple/
+
+# IDE / 系统
+.DS_Store
+.idea/
+.zed/
+*.swp
