@@ -87,6 +87,46 @@ fn report_theme(window: tauri::Webview, theme: String, state: tauri::State<'_, A
     });
 }
 
+/// Tauri command: called from the tab bar (local page) when the user clicks a
+/// tab. Lazily creates the target site's webview on first switch, then shows it
+/// while hiding every other content webview — each site keeps its page state and
+/// session, so switching never requires re-login.
+#[tauri::command]
+fn activate_tab(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ActiveTab>,
+    tab: String,
+) -> Result<(), String> {
+    let site = sites::site_by_key(&tab).ok_or_else(|| format!("unknown tab: {tab}"))?;
+    let window = app.get_window("main").ok_or("main window not found")?;
+
+    // Lazy-load: create the target site's webview on first switch.
+    if window.get_webview(&tab).is_none() {
+        let phys = window.inner_size().map_err(|e| e.to_string())?;
+        let scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
+        let (pos, size) = sites::content_bounds(w, h);
+        window
+            .add_child(
+                WebviewBuilder::new(
+                    site.key,
+                    WebviewUrl::External(site.url.parse::<tauri::Url>().map_err(|e| e.to_string())?),
+                )
+                .initialization_script(THEME_DETECT_SCRIPT)
+                .zoom_hotkeys_enabled(true),
+                pos,
+                size,
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    *state.0.lock().unwrap() = tab;
+    let _ = window.set_title(site.title);
+    apply_tab_visibility(&window);
+
+    Ok(())
+}
+
 /// Update the macOS window chrome to match the web page's theme.
 #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 fn apply_window_theme(window: &tauri::Window, theme: &str) {
@@ -130,8 +170,39 @@ fn apply_window_theme(window: &tauri::Window, theme: &str) {
     }
 }
 
-/// Sync all webviews to the window's current size. The tabbar sits at the top
-/// (height = TAB_BAR_HEIGHT) and every content webview fills the area below it.
+/// Place every content webview according to the active tab: the active one sits
+/// in the content area (below the tabbar), all others are moved off-screen.
+/// Tauri's Webview has no `set_visible`, so visibility is achieved by position.
+fn apply_tab_visibility(window: &tauri::Window) {
+    let active = window
+        .app_handle()
+        .state::<ActiveTab>()
+        .0
+        .lock()
+        .unwrap()
+        .clone();
+    let Ok(phys) = window.inner_size() else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
+    let (pos, size) = sites::content_bounds(w, h);
+    let hidden = tauri::LogicalPosition::new(0.0, -10000.0);
+
+    for site in sites::sites() {
+        if let Some(wv) = window.get_webview(site.key) {
+            if site.key == active {
+                let _ = wv.set_position(pos);
+                let _ = wv.set_size(size);
+            } else {
+                let _ = wv.set_position(hidden);
+            }
+        }
+    }
+}
+
+/// Sync all webviews to the window's current size: the tabbar stays at the top
+/// (height = TAB_BAR_HEIGHT), content webviews follow the active tab.
 fn relayout(window: &tauri::Window) {
     let Ok(phys) = window.inner_size() else {
         return;
@@ -139,18 +210,12 @@ fn relayout(window: &tauri::Window) {
     let scale = window.scale_factor().unwrap_or(1.0);
     let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
     let (tab_pos, tab_size) = sites::tab_bounds(w, h);
-    let (content_pos, content_size) = sites::content_bounds(w, h);
 
     if let Some(wv) = window.get_webview("tabbar") {
         let _ = wv.set_position(tab_pos);
         let _ = wv.set_size(tab_size);
     }
-    for site in sites::sites() {
-        if let Some(wv) = window.get_webview(site.key) {
-            let _ = wv.set_position(content_pos);
-            let _ = wv.set_size(content_size);
-        }
-    }
+    apply_tab_visibility(window);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -163,7 +228,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ActiveTab(std::sync::Mutex::new(sites::DEFAULT_KEY.to_string())))
-        .invoke_handler(tauri::generate_handler![report_theme])
+        .invoke_handler(tauri::generate_handler![report_theme, activate_tab])
         .on_menu_event(move |app, event| {
             let state = app.state::<ActiveTab>();
             let active = state.0.lock().unwrap().clone();
