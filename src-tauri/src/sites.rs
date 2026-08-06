@@ -3,6 +3,9 @@ use tauri::{LogicalPosition, LogicalSize};
 /// 顶部标签栏高度（逻辑像素）。内容 webview 从该高度下方开始铺满窗口。
 pub const TAB_BAR_HEIGHT: f64 = 44.0;
 
+/// 默认激活的站点 key（与前端 src/tabs.js 的 DEFAULT_TAB 保持一致）。
+pub const DEFAULT_KEY: &str = "deepseek";
+
 /// 单个站点的配置。
 #[derive(Debug, PartialEq, Eq)]
 pub struct Site {
@@ -53,6 +56,14 @@ pub fn content_bounds(win_w: f64, win_h: f64) -> (LogicalPosition<f64>, LogicalS
     (LogicalPosition::new(0.0, TAB_BAR_HEIGHT), LogicalSize::new(w, h))
 }
 
+/// 计算顶部标签栏 webview 的位置与尺寸：占满窗口宽度、固定高度；
+/// 窗口高度不足标签栏高度时高度钳制为窗口高度。
+pub fn tab_bounds(win_w: f64, win_h: f64) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    let w = win_w.max(0.0);
+    let h = TAB_BAR_HEIGHT.min(win_h.max(0.0));
+    (LogicalPosition::new(0.0, 0.0), LogicalSize::new(w, h))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,5 +109,29 @@ mod tests {
         // 负宽度
         let (_, size2) = content_bounds(-10.0, 100.0);
         assert_eq!(size2.width, 0.0);
+    }
+
+    #[test]
+    fn tab_bounds_full_width_top() {
+        let (pos, size) = tab_bounds(1200.0, 800.0);
+        assert_eq!(pos.x, 0.0);
+        assert_eq!(pos.y, 0.0);
+        assert_eq!(size.width, 1200.0);
+        assert_eq!(size.height, TAB_BAR_HEIGHT);
+    }
+
+    #[test]
+    fn tab_bounds_clamps_height_when_window_smaller_than_tabbar() {
+        let (_, size) = tab_bounds(1200.0, 20.0);
+        assert_eq!(size.height, 20.0);
+        // 负宽度
+        let (_, size2) = tab_bounds(-10.0, 100.0);
+        assert_eq!(size2.width, 0.0);
+    }
+
+    #[test]
+    fn default_key_is_first_site() {
+        assert_eq!(DEFAULT_KEY, "deepseek");
+        assert_eq!(site_by_key(DEFAULT_KEY).map(|s| s.url), Some("https://chat.deepseek.com"));
     }
 }
