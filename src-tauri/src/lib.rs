@@ -337,10 +337,6 @@ pub fn run() {
 
             apply_window_theme(&window, default_site.theme);
 
-            // --- macOS: native titlebar buttons for tab switching ---
-            #[cfg(target_os = "macos")]
-            mac_titlebar::setup(app, &window)?;
-
             // --- App menu bar (macOS) ---
             #[cfg(target_os = "macos")]
             {
@@ -469,13 +465,23 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {
+        .run(|app, event| {
             #[cfg(target_os = "macos")]
-            if let RunEvent::Reopen { .. } = _event {
-                if let Some(w) = _app.get_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
+            match event {
+                // App fully launched, window is ready: native titlebar tab
+                // buttons must be added here (adding earlier has no effect).
+                RunEvent::Ready => {
+                    if let Some(w) = app.get_window("main") {
+                        let _ = mac_titlebar::setup(&w);
+                    }
                 }
+                RunEvent::Reopen { .. } => {
+                    if let Some(w) = app.get_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
+                _ => {}
             }
         });
 }
