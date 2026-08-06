@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SITES, DEFAULT_TAB, nextActiveKey } from "./tabs.js";
+import { SITES, DEFAULT_TAB, nextActiveKey, WINDOW_ACTIONS } from "./tabs.js";
 
 test("SITES contains three sites in tab order", () => {
   assert.deepEqual(
@@ -29,4 +29,8 @@ test("nextActiveKey ignores unknown key and keeps current", () => {
 
 test("nextActiveKey ignores clicking the already-active tab", () => {
   assert.equal(nextActiveKey(SITES, "chatglm", "chatglm"), "chatglm");
+});
+
+test("WINDOW_ACTIONS contains the three supported window controls", () => {
+  assert.deepEqual(WINDOW_ACTIONS, ["minimize", "toggle_maximize", "close"]);
 });

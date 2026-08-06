@@ -44,3 +44,19 @@ export async function activateTab(key) {
     return { ok: false, key, error: String(e) };
   }
 }
+
+// 自定义工具栏支持的窗口操作（与 Rust 侧 window_control 保持一致）。
+export const WINDOW_ACTIONS = ["minimize", "toggle_maximize", "close"];
+
+// 通过 IPC 请求窗口操作（最小化 / 最大化切换 / 关闭到托盘）。
+export async function windowControl(action) {
+  if (!WINDOW_ACTIONS.includes(action)) {
+    return { ok: false, action, error: "unknown action" };
+  }
+  try {
+    await window.__TAURI_INTERNALS__.invoke("window_control", { action });
+    return { ok: true, action };
+  } catch (e) {
+    return { ok: false, action, error: String(e) };
+  }
+}

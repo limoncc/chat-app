@@ -127,6 +127,56 @@ fn activate_tab(
     Ok(())
 }
 
+/// Tauri command: window controls for the custom toolbar. The system title bar
+/// (including traffic lights) is hidden, so the toolbar must provide these.
+#[tauri::command]
+fn window_control(app: tauri::AppHandle, action: String) -> Result<(), String> {
+    let window = app.get_window("main").ok_or("main window not found")?;
+    match action.as_str() {
+        "minimize" => window.minimize().map_err(|e| e.to_string()),
+        "toggle_maximize" => {
+            if window.is_maximized().unwrap_or(false) {
+                window.unmaximize().map_err(|e| e.to_string())
+            } else {
+                window.maximize().map_err(|e| e.to_string())
+            }
+        }
+        // 与系统关闭按钮一致：隐藏到托盘而非退出
+        "close" => {
+            let _ = window.hide();
+            Ok(())
+        }
+        other => Err(format!("unknown window action: {other}")),
+    }
+}
+
+/// Hide the macOS traffic lights so the window is fully frameless; the custom
+/// toolbar renders its own window controls instead.
+#[cfg(target_os = "macos")]
+fn hide_traffic_lights(window: &tauri::Window) {
+    use objc2::msg_send;
+    use objc2::runtime::NSObject;
+    use objc2_app_kit::NSWindowButton;
+
+    let Ok(nswin) = window.ns_window() else {
+        return;
+    };
+    let nswin = nswin as *mut NSObject;
+    if nswin.is_null() {
+        return;
+    }
+    for button_type in [
+        NSWindowButton::CloseButton,
+        NSWindowButton::MiniaturizeButton,
+        NSWindowButton::ZoomButton,
+    ] {
+        let btn: *mut NSObject = unsafe { msg_send![nswin, standardWindowButton: button_type] };
+        if !btn.is_null() {
+            let _: () = unsafe { msg_send![btn, setHidden: true] };
+        }
+    }
+}
+
 /// Update the macOS window chrome to match the web page's theme.
 #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 fn apply_window_theme(window: &tauri::Window, theme: &str) {
@@ -228,7 +278,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ActiveTab(std::sync::Mutex::new(sites::DEFAULT_KEY.to_string())))
-        .invoke_handler(tauri::generate_handler![report_theme, activate_tab])
+        .invoke_handler(tauri::generate_handler![report_theme, activate_tab, window_control])
         .on_menu_event(move |app, event| {
             let state = app.state::<ActiveTab>();
             let active = state.0.lock().unwrap().clone();
@@ -292,6 +342,10 @@ pub fn run() {
             )?;
 
             apply_window_theme(&window, default_site.theme);
+
+            // --- Hide the system title bar traffic lights (frameless window) ---
+            #[cfg(target_os = "macos")]
+            hide_traffic_lights(&window);
 
             // --- App menu bar (macOS) ---
             #[cfg(target_os = "macos")]
