@@ -13,8 +13,8 @@
       background: #1a1a2e;
       font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
     }
-    /* 自定义工具栏：完全替代系统标题栏（红绿灯已隐藏）。高度与 Rust 侧
-       TAB_BAR_HEIGHT 保持一致，整体为窗口拖动区。 */
+    /* 顶部标签工具栏：紧贴原生标题栏下方。高度与 Rust 侧 TAB_BAR_HEIGHT
+       保持一致；macOS 左侧留出红绿灯区域，Windows 无需留空。 */
     #tabbar {
       position: fixed;
       top: 0;
@@ -23,7 +23,7 @@
       height: 32px;
       display: flex;
       align-items: center;
-      padding: 0 8px 0 12px;
+      padding: 0 12px;
       background: rgba(24, 24, 40, 0.78);
       -webkit-backdrop-filter: blur(20px) saturate(1.4);
       backdrop-filter: blur(20px) saturate(1.4);
@@ -31,6 +31,9 @@
       -webkit-user-select: none;
       -webkit-app-region: drag; /* 空白区域允许拖动窗口 */
     }
+    /* macOS 系统红绿灯在左上角，预留空间避免遮挡标签 */
+    html[data-tauri-platform="macos"] #tabbar { padding-left: 78px; }
+
     #tabs {
       display: flex;
       align-items: center;
@@ -52,45 +55,11 @@
     }
     .tab:hover { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.85); }
     .tab.active { background: rgba(255, 255, 255, 0.15); color: #fff; }
-
-    /* 自定义窗口控制按钮（替代红绿灯） */
-    #window-controls {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 2px;
-      -webkit-app-region: no-drag;
-    }
-    .wc {
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: none;
-      border-radius: 6px;
-      background: transparent;
-      color: rgba(255, 255, 255, 0.55);
-      cursor: pointer;
-    }
-    .wc:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
-    .wc.close:hover { background: rgba(232, 17, 35, 0.85); color: #fff; }
   </style>
 </head>
 <body>
   <div id="tabbar">
     <div id="tabs"></div>
-    <div id="window-controls">
-      <button class="wc" data-action="minimize" title="最小化">
-        <svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 6h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-      </button>
-      <button class="wc" data-action="toggle_maximize" title="最大化/还原">
-        <svg viewBox="0 0 12 12" width="12" height="12"><rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
-      </button>
-      <button class="wc close" data-action="close" title="关闭">
-        <svg viewBox="0 0 12 12" width="12" height="12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-      </button>
-    </div>
   </div>
   <script type="module">
     import {
@@ -110,10 +79,6 @@
       const res = await activateTab(key);
       if (res.ok) active = key;
       updateActiveTab(tabsEl, active);
-    });
-
-    document.querySelectorAll(".wc").forEach((btn) => {
-      btn.addEventListener("click", () => windowControl(btn.dataset.action));
     });
 
     // 双击工具栏空白处最大化/还原，与原生标题栏行为一致。

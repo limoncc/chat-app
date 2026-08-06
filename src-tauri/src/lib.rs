@@ -127,8 +127,9 @@ fn activate_tab(
     Ok(())
 }
 
-/// Tauri command: window controls for the custom toolbar. The system title bar
-/// (including traffic lights) is hidden, so the toolbar must provide these.
+/// Tauri command: window controls used by the toolbar. Kept for the
+/// "double-click the toolbar to maximize/restore" gesture, mirroring the
+/// native title bar behaviour.
 #[tauri::command]
 fn window_control(app: tauri::AppHandle, action: String) -> Result<(), String> {
     let window = app.get_window("main").ok_or("main window not found")?;
@@ -147,34 +148,6 @@ fn window_control(app: tauri::AppHandle, action: String) -> Result<(), String> {
             Ok(())
         }
         other => Err(format!("unknown window action: {other}")),
-    }
-}
-
-/// Hide the macOS traffic lights so the window is fully frameless; the custom
-/// toolbar renders its own window controls instead. Must be called after the
-/// window is fully loaded (RunEvent::Ready), otherwise the buttons are nil.
-#[cfg(target_os = "macos")]
-fn hide_traffic_lights(window: &tauri::Window) {
-    use objc2::msg_send;
-    use objc2::runtime::{Bool, NSObject};
-    use objc2_app_kit::NSWindowButton;
-
-    let Ok(nswin) = window.ns_window() else {
-        return;
-    };
-    let nswin = nswin as *mut NSObject;
-    if nswin.is_null() {
-        return;
-    }
-    for button_type in [
-        NSWindowButton::CloseButton,
-        NSWindowButton::MiniaturizeButton,
-        NSWindowButton::ZoomButton,
-    ] {
-        let btn: *mut NSObject = unsafe { msg_send![nswin, standardWindowButton: button_type] };
-        if !btn.is_null() {
-            let _: () = unsafe { msg_send![btn, setHidden: Bool::YES] };
-        }
     }
 }
 
@@ -472,23 +445,13 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
+        .run(|_app, _event| {
             #[cfg(target_os = "macos")]
-            match event {
-                // App fully launched: window is ready, so hiding the traffic
-                // lights now is reliable.
-                RunEvent::Ready => {
-                    if let Some(w) = app.get_window("main") {
-                        hide_traffic_lights(&w);
-                    }
+            if let RunEvent::Reopen { .. } = _event {
+                if let Some(w) = _app.get_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
                 }
-                RunEvent::Reopen { .. } => {
-                    if let Some(w) = app.get_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                }
-                _ => {}
             }
         });
 }
