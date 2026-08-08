@@ -6,10 +6,10 @@
 
 ## 功能特性
 
-- 单窗口 + 下拉/循环切换任意 AI 站点（数量不限，配置驱动）
+- 单窗口 + 循环切换任意 AI 站点（数量不限，配置驱动）
 - 各站登录态/聊天记录独立保持（多 webview 常驻，切换不重载）
 - 配置式站点管理：设置界面或直接编辑 `sites.json`，增删改/排序/设默认，保存即生效
-- macOS 用原生标题栏「下拉 + 循环切换 + 设置」按钮，Windows 用内容区 webview 工具栏，各平台原生体验
+- macOS 用原生标题栏「循环切换 + 设置」按钮，Windows 用内容区 webview 工具栏，各平台原生体验
 - macOS 深色/浅色窗口外观跟随站点主题
 - 系统托盘：关闭窗口最小化到托盘，托盘可恢复/退出/打开设置
 
@@ -81,7 +81,7 @@ npm run build
 
 两种管理方式：
 
-1. **设置界面**：macOS 标题栏「⚙ 设置」/ Windows 工具栏「⚙ 设置」/ 托盘菜单「Settings…」/ macOS `Cmd+,`，支持添加、编辑、删除、排序站点，设置默认站点。
+1. **设置界面**：macOS 标题栏「Settings」/ Windows 工具栏「Settings」/ 托盘菜单「Settings…」/ macOS `Cmd+,`，支持添加、编辑、删除、排序站点，设置默认站点。
 2. **直接编辑 `sites.json`**：手动修改后**重启应用**生效（设置界面内的修改则是即时生效）。
 
 `sites.json` 结构：
@@ -107,8 +107,8 @@ npm run build
 
 | 平台 | 站点切换 UI | 实现 |
 |------|------------|------|
-| macOS | 标题栏原生「下拉选择器 + 循环切换按钮 + 设置按钮」（红绿灯保留） | `src-tauri/src/mac_titlebar.rs` |
-| Windows / 其他 | 内容区顶部 webview 工具栏（下拉 + 循环 + 设置） | `index.html` + `src/tabs.js` |
+| macOS | 标题栏原生「循环切换按钮 + 设置按钮」（红绿灯保留） | `src-tauri/src/mac_titlebar.rs` |
+| Windows / 其他 | 内容区顶部 webview 工具栏（循环 + 设置） | `index.html` + `src/tabs.js` |
 
 两平台共用同一套切换核心逻辑（`switch_tab`：懒加载 + 显隐切换），保证会话保持。站点配置变更后通过 Tauri 事件广播，两平台 UI 即时刷新。
 
@@ -137,7 +137,7 @@ chat_app/
 ## 常见问题
 
 - **切换站点会重新登录吗？** 不会。每个站点各占一个常驻 webview，切换只是显示/隐藏（位置法），页面加载状态与会话完整保留。
-- **如何添加新网站？** 打开设置界面（macOS `Cmd+,` 或标题栏「⚙ 设置」），填写 key/URL/显示名称/主题后点击「添加」，立即生效。
+- **如何添加新网站？** 打开设置界面（macOS `Cmd+,` 或标题栏「Settings」），填写 key/URL/显示名称/主题后点击「添加」，立即生效。
 - **配置文件被改坏了？** 应用会自动备份为 `sites.json.bak` 并回退到内置默认站点。
 - **为什么用 `unstable` feature？** 单窗口内叠加多个 webview 依赖 Tauri 的 `window.add_child`（当前为 unstable API），已在 `Cargo.toml` 锁定 tauri 版本。
 - **改前端代码后没生效？** `npm run tauri dev` 会自动同步，若手动构建请先执行 `npm run build`。

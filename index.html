@@ -40,19 +40,6 @@
       gap: 0;
       min-width: 0;
     }
-    #site-select {
-      -webkit-app-region: no-drag;
-      height: 26px;
-      padding: 0 8px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.06);
-      color: #fff;
-      font-size: 12px;
-      outline: none;
-      cursor: pointer;
-    }
-    #site-select option { background: #1a1a2e; color: #fff; }
     .btn {
       -webkit-app-region: no-drag;
       height: 26px;
@@ -74,7 +61,6 @@
   <div id="tabbar">
     <div id="toolbar">
       <button id="cycle-btn" class="btn" title="点击切换到下一个站点"></button>
-      <select id="site-select" title="选择站点"></select>
       <button id="settings-btn" class="btn" title="打开设置">Settings</button>
     </div>
   </div>
@@ -88,24 +74,14 @@
       openSettings,
     } from "./src/tabs.js";
 
-    const selectEl = document.getElementById("site-select");
     const cycleBtn = document.getElementById("cycle-btn");
     const settingsBtn = document.getElementById("settings-btn");
 
     let sites = [];
     let active = "";
 
-    // 用当前站点列表重绘下拉与循环按钮文字。
+    // 用当前激活站点更新循环按钮文字。
     function updateUI() {
-      selectEl.replaceChildren(
-        ...sites.map((s) => {
-          const opt = document.createElement("option");
-          opt.value = s.key;
-          opt.textContent = s.title;
-          return opt;
-        }),
-      );
-      selectEl.value = active;
       const cur = sites.find((s) => s.key === active);
       cycleBtn.textContent = cur ? cur.title : "";
     }
@@ -131,15 +107,6 @@
         updateUI();
       });
     }
-
-    selectEl.addEventListener("change", () => {
-      const key = selectEl.value;
-      if (!key || key === active) return;
-      activateTab(key).then((res) => {
-        if (res.ok) active = key;
-        updateUI();
-      });
-    });
 
     cycleBtn.addEventListener("click", () => {
       const key = nextSiteKey(sites, active);
