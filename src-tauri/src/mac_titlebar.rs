@@ -130,7 +130,16 @@ pub fn rebuild(window: &tauri::Window) -> tauri::Result<()> {
     });
     let target_obj = target_ptr.0 as *mut AnyObject;
 
-    // 下拉选择器：列出全部站点，当前站点选中。
+    // 循环切换按钮：文字 = 当前站点，点击循环切换。放最左。
+    let cycle_btn = NSButton::new(mtm);
+    cycle_btn.setTitle(&NSString::from_str(&active_title));
+    unsafe {
+        cycle_btn.setTarget(Some(&*target_obj));
+        cycle_btn.setAction(Some(sel!(cycleClicked:)));
+    }
+    cycle_btn.sizeToFit();
+
+    // 下拉选择器：列出全部站点，当前站点选中。放中间。
     let popup = NSPopUpButton::new(mtm);
     for s in &cfg.sites {
         popup.addItemWithTitle(&NSString::from_str(&s.title));
@@ -142,41 +151,40 @@ pub fn rebuild(window: &tauri::Window) -> tauri::Result<()> {
     }
     popup.sizeToFit();
 
-    // 循环切换按钮：文字 = 当前站点，点击循环切换。
-    let cycle_btn = NSButton::new(mtm);
-    cycle_btn.setTitle(&NSString::from_str(&active_title));
-    unsafe {
-        cycle_btn.setTarget(Some(&*target_obj));
-        cycle_btn.setAction(Some(sel!(cycleClicked:)));
-    }
-    cycle_btn.sizeToFit();
-
-    // 设置按钮。
+    // 设置按钮（最右，英文）。
     let settings_btn = NSButton::new(mtm);
-    settings_btn.setTitle(&NSString::from_str("⚙ 设置"));
+    settings_btn.setTitle(&NSString::from_str("Settings"));
     unsafe {
         settings_btn.setTarget(Some(&*target_obj));
         settings_btn.setAction(Some(sel!(settingsClicked:)));
     }
     settings_btn.sizeToFit();
 
-    // 手动水平布局：popup | 循环按钮 | 设置按钮，间距 6px。
-    let gap = 6.0f64;
-    let popup_w = popup.frame().size.width;
+    // 统一控件高度并垂直居中，顺序：循环按钮 | 下拉 | 设置，间距一致。
+    let ctrl_h = 24.0f64;
+    let gap = 8.0f64;
+    let container_h = 28.0f64;
+    let y = (container_h - ctrl_h) / 2.0;
+
     let cycle_w = cycle_btn.frame().size.width;
+    let popup_w = popup.frame().size.width;
     let settings_w = settings_btn.frame().size.width;
-    let total_w = popup_w + gap + cycle_w + gap + settings_w;
+    cycle_btn.setFrameSize(NSSize::new(cycle_w, ctrl_h));
+    popup.setFrameSize(NSSize::new(popup_w, ctrl_h));
+    settings_btn.setFrameSize(NSSize::new(settings_w, ctrl_h));
+
+    let total_w = cycle_w + gap + popup_w + gap + settings_w;
 
     let container = NSView::new(mtm);
-    container.setFrameSize(NSSize::new(total_w, 28.0));
+    container.setFrameSize(NSSize::new(total_w, container_h));
     container.setFrameOrigin(NSPoint::new(0.0, 0.0));
 
-    popup.setFrameOrigin(NSPoint::new(0.0, 2.0));
-    cycle_btn.setFrameOrigin(NSPoint::new(popup_w + gap, 2.0));
-    settings_btn.setFrameOrigin(NSPoint::new(popup_w + gap + cycle_w + gap, 2.0));
+    cycle_btn.setFrameOrigin(NSPoint::new(0.0, y));
+    popup.setFrameOrigin(NSPoint::new(cycle_w + gap, y));
+    settings_btn.setFrameOrigin(NSPoint::new(cycle_w + gap + popup_w + gap, y));
 
-    container.addSubview(&popup);
     container.addSubview(&cycle_btn);
+    container.addSubview(&popup);
     container.addSubview(&settings_btn);
 
     // 保存控件句柄供 update_active 更新（主线程访问）。
@@ -214,12 +222,14 @@ pub fn update_active(window: &tauri::Window, key: &str) {
     let guard = lock.lock().unwrap();
     if let Some(ctl) = guard.as_ref() {
         unsafe {
-            let popup: &AnyObject = &*ctl.popup;
-            let _: () = msg_send![popup, selectItemAtIndex: idx as isize];
-            let btn: &AnyObject = &*ctl.cycle_btn;
-            let title_str = NSString::from_str(title);
-            let _: () = msg_send![btn, setTitle: &*title_str];
-            let _: () = msg_send![btn, sizeToFit];
+            let popup: &NSPopUpButton = &*(ctl.popup as *const NSPopUpButton);
+            popup.selectItemAtIndex(idx as isize);
+            let btn: &NSButton = &*(ctl.cycle_btn as *const NSButton);
+            btn.setTitle(&NSString::from_str(title));
+            btn.sizeToFit();
+            // 保持与其它控件一致的高度并垂直居中。
+            let w = btn.frame().size.width;
+            btn.setFrameSize(NSSize::new(w, 24.0));
         }
     }
 }
