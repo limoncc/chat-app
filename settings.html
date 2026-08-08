@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>设置 - ChatApp</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      background: #14142a;
+      color: #e8e8f0;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+    }
+    body { padding: 20px; }
+    h1 { font-size: 16px; margin-bottom: 16px; }
+    section { margin-bottom: 20px; }
+    h2 { font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 8px; font-weight: 600; }
+    #error { color: #ff6b6b; min-height: 18px; margin-bottom: 12px; font-size: 12px; }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    input, select {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: #fff;
+      padding: 6px 8px;
+      font-size: 12px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: rgba(120,140,255,0.6); }
+    input[type="text"] { min-width: 140px; }
+    button {
+      background: rgba(255,255,255,0.09);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: #e8e8f0;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:hover { background: rgba(255,255,255,0.16); }
+    button.primary { background: rgba(90,110,255,0.7); border-color: transparent; }
+    button.primary:hover { background: rgba(90,110,255,0.85); }
+    ul { list-style: none; }
+    .site-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .idx { width: 22px; text-align: center; color: rgba(255,255,255,0.4); flex-shrink: 0; }
+    .info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+    .info .title { font-weight: 600; }
+    .info .meta { font-size: 11px; color: rgba(255,255,255,0.45); word-break: break-all; }
+    .info input { width: 100%; }
+    .ops { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    select.theme { padding: 4px 6px; }
+  </style>
+</head>
+<body>
+  <h1>站点设置</h1>
+  <div id="error"></div>
+
+  <section>
+    <h2>默认站点</h2>
+    <div class="row">
+      <select id="default-select" title="启动时激活的站点"></select>
+      <span style="color:rgba(255,255,255,0.45);font-size:12px">应用启动后自动切换到该站点</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>添加站点</h2>
+    <form id="add-form">
+      <div class="row">
+        <input type="text" id="f-key" placeholder="key（英文，如 gemini）" required />
+        <input type="text" id="f-url" placeholder="https://…" required />
+        <input type="text" id="f-title" placeholder="显示名称，如 Gemini" required />
+        <select id="f-theme">
+          <option value="dark">dark</option>
+          <option value="light">light</option>
+        </select>
+        <button type="submit" class="primary">添加</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2>站点列表</h2>
+    <ul id="site-list"></ul>
+  </section>
+
+  <script type="module">
+    import { fetchSites, onSitesChanged } from "./src/tabs.js";
+    import { initSettings } from "./src/settings.js";
+    initSettings(document, fetchSites, onSitesChanged);
+  </script>
+</body>
+</html>

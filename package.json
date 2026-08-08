@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "build": "node -e \"const f=require('fs');f.mkdirSync('dist/src',{recursive:true});f.copyFileSync('index.html','dist/index.html');f.cpSync('src','dist/src',{recursive:true})\"",
+    "build": "node -e \"const f=require('fs');f.mkdirSync('dist/src',{recursive:true});f.copyFileSync('index.html','dist/index.html');f.copyFileSync('settings.html','dist/settings.html');f.cpSync('src','dist/src',{recursive:true})\"",
     "test": "node --test \"src/**/*.test.js\""
   },
   "devDependencies": {
