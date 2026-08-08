@@ -162,7 +162,7 @@ pub fn rebuild(window: &tauri::Window) -> tauri::Result<()> {
 
     // 统一控件高度并垂直居中，顺序：循环按钮 | 下拉 | 设置，间距一致。
     let ctrl_h = 24.0f64;
-    let gap = 4.0f64;
+    let gap = 0.0f64;
     let container_h = 28.0f64;
     let y = (container_h - ctrl_h) / 2.0;
 
