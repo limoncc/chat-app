@@ -9,6 +9,11 @@ use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{NSButton, NSLayoutAttribute, NSTitlebarAccessoryViewController, NSView};
 use objc2_foundation::{NSPoint, NSSize, NSString, NSObject as FoundationNSObject, NSObjectProtocol};
 
+/// 标题栏控件统一高度、间距、容器高度（保证切换站点后布局稳定）。
+const CONTROL_H: f64 = 24.0;
+const GAP: f64 = 6.0;
+const CONTAINER_H: f64 = 28.0;
+
 /// 供按钮回调读取的 AppHandle（setup 时设置一次）。
 static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 
@@ -22,6 +27,7 @@ static TARGET: std::sync::OnceLock<TargetPtr> = std::sync::OnceLock::new();
 /// 控件句柄（raw pointer，仅主线程读写；rebuild 时更新）。
 struct Controls {
     cycle_btn: *mut AnyObject,
+    settings_btn: *mut AnyObject,
 }
 // raw pointer 默认不 Send，但此处仅在主线程读写，安全。
 unsafe impl Send for Controls {}
@@ -129,25 +135,22 @@ pub fn rebuild(window: &tauri::Window) -> tauri::Result<()> {
     }
     settings_btn.sizeToFit();
 
-    // 统一控件高度并垂直居中，顺序：循环按钮 | 设置。
-    let ctrl_h = 24.0f64;
-    let gap = 0.0f64;
-    let container_h = 28.0f64;
-    let y = (container_h - ctrl_h) / 2.0;
+    // 统一控件高度并垂直居中，顺序：循环按钮 | 设置，间距固定。
+    let y = (CONTAINER_H - CONTROL_H) / 2.0;
 
     let cycle_w = cycle_btn.frame().size.width;
     let settings_w = settings_btn.frame().size.width;
-    cycle_btn.setFrameSize(NSSize::new(cycle_w, ctrl_h));
-    settings_btn.setFrameSize(NSSize::new(settings_w, ctrl_h));
+    cycle_btn.setFrameSize(NSSize::new(cycle_w, CONTROL_H));
+    settings_btn.setFrameSize(NSSize::new(settings_w, CONTROL_H));
 
-    let total_w = cycle_w + gap + settings_w;
+    let total_w = cycle_w + GAP + settings_w;
 
     let container = NSView::new(mtm);
-    container.setFrameSize(NSSize::new(total_w, container_h));
+    container.setFrameSize(NSSize::new(total_w, CONTAINER_H));
     container.setFrameOrigin(NSPoint::new(0.0, 0.0));
 
     cycle_btn.setFrameOrigin(NSPoint::new(0.0, y));
-    settings_btn.setFrameOrigin(NSPoint::new(cycle_w + gap, y));
+    settings_btn.setFrameOrigin(NSPoint::new(cycle_w + GAP, y));
 
     container.addSubview(&cycle_btn);
     container.addSubview(&settings_btn);
@@ -155,6 +158,7 @@ pub fn rebuild(window: &tauri::Window) -> tauri::Result<()> {
     // 保存控件句柄供 update_active 更新（主线程访问）。
     let ctl = Controls {
         cycle_btn: (&*cycle_btn as *const NSButton) as *const AnyObject as *mut AnyObject,
+        settings_btn: (&*settings_btn as *const NSButton) as *const AnyObject as *mut AnyObject,
     };
     *CONTROLS.get_or_init(|| std::sync::Mutex::new(None)).lock().unwrap() = Some(ctl);
 
@@ -173,7 +177,8 @@ pub fn rebuild(window: &tauri::Window) -> tauri::Result<()> {
     Ok(())
 }
 
-/// 切换后同步标题栏显示：更新循环按钮文字。必须在主线程执行。
+/// 切换后同步标题栏显示：更新循环按钮文字并重排，保持与设置按钮的间距恒定。
+/// 必须在主线程执行。
 pub fn update_active(window: &tauri::Window, key: &str) {
     let cfg = window.app_handle().state::<sites::SiteStore>().snapshot();
     let Some(idx) = cfg.sites.iter().position(|s| s.key == key) else {
@@ -186,12 +191,14 @@ pub fn update_active(window: &tauri::Window, key: &str) {
     let guard = lock.lock().unwrap();
     if let Some(ctl) = guard.as_ref() {
         unsafe {
-            let btn: &NSButton = &*(ctl.cycle_btn as *const NSButton);
-            btn.setTitle(&NSString::from_str(title));
-            btn.sizeToFit();
-            // 保持与设置按钮一致的高度并垂直居中。
-            let w = btn.frame().size.width;
-            btn.setFrameSize(NSSize::new(w, 24.0));
+            let cycle: &NSButton = &*(ctl.cycle_btn as *const NSButton);
+            let settings: &NSButton = &*(ctl.settings_btn as *const NSButton);
+            cycle.setTitle(&NSString::from_str(title));
+            cycle.sizeToFit();
+            let w = cycle.frame().size.width;
+            cycle.setFrameSize(NSSize::new(w, CONTROL_H));
+            // 设置按钮跟随新宽度，保持固定间距与垂直居中。
+            settings.setFrameOrigin(NSPoint::new(w + GAP, (CONTAINER_H - CONTROL_H) / 2.0));
         }
     }
 }
