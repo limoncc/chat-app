@@ -61,7 +61,7 @@ pub fn default_config() -> SitesConfig {
                 key: "qianwen".to_string(),
                 url: "https://www.qianwen.com".to_string(),
                 title: "Qianwen".to_string(),
-                theme: "light".to_string(),
+                theme: "dark".to_string(),
             },
         ],
     }
