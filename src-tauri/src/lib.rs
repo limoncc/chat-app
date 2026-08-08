@@ -74,6 +74,32 @@ const THEME_DETECT_SCRIPT: &str = r#"
 })();
 "#;
 
+// 对配置为 dark 的站点注入：强制页面进入暗色模式。
+// qianwen 主题由 html 的 data-theme / data-theme-actual / color-scheme-lock 三个属性控制，
+// 只设置这三个属性（不碰 class/body），MutationObserver 仅在属性被改回浅色时兜底强制。
+const THEME_FORCE_DARK_SCRIPT: &str = r#"
+(function(){
+    function darken(){
+        var el=document.documentElement;
+        if(!el)return;
+        el.setAttribute('data-theme','dark');
+        el.setAttribute('data-theme-actual','dark');
+        el.setAttribute('color-scheme-lock','dark');
+    }
+    darken();
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',darken);
+    var opts={attributes:true,attributeFilter:['data-theme','data-theme-actual','color-scheme-lock'],subtree:false};
+    try{
+        new MutationObserver(function(){
+            var el=document.documentElement;
+            if(el && (el.getAttribute('data-theme')!=='dark'||el.getAttribute('data-theme-actual')!=='dark')){
+                darken();
+            }
+        }).observe(document.documentElement,opts);
+    }catch(e){}
+})();
+"#;
+
 /// Tauri command: called from JS via invoke() to report theme changes.
 /// Only the active tab's theme is applied to the window chrome, so a
 /// background webview's theme cannot override the visible window.
@@ -116,17 +142,17 @@ fn switch_tab(app: &tauri::AppHandle, tab: &str) -> Result<(), String> {
         let scale = window.scale_factor().map_err(|e| e.to_string())?;
         let (w, h) = (phys.width as f64 / scale, phys.height as f64 / scale);
         let (pos, size) = sites::content_bounds(content_offset(), w, h);
+        let mut builder = WebviewBuilder::new(
+            site.key.clone(),
+            WebviewUrl::External(site.url.parse::<tauri::Url>().map_err(|e| e.to_string())?),
+        )
+        .initialization_script(THEME_DETECT_SCRIPT);
+        // 配置为 dark 的站点强制暗色（默认浅色的站点如 qianwen 需要）。
+        if site.theme == "dark" {
+            builder = builder.initialization_script(THEME_FORCE_DARK_SCRIPT);
+        }
         window
-            .add_child(
-                WebviewBuilder::new(
-                    site.key.clone(),
-                    WebviewUrl::External(site.url.parse::<tauri::Url>().map_err(|e| e.to_string())?),
-                )
-                .initialization_script(THEME_DETECT_SCRIPT)
-                .zoom_hotkeys_enabled(true),
-                pos,
-                size,
-            )
+            .add_child(builder.zoom_hotkeys_enabled(true), pos, size)
             .map_err(|e| e.to_string())?;
     }
 
@@ -516,13 +542,16 @@ pub fn run() {
                 .state::<sites::SiteStore>()
                 .site_by_key(&default_key)
                 .ok_or("default site missing")?;
+            let mut default_builder = WebviewBuilder::new(
+                default_site.key.clone(),
+                WebviewUrl::External(default_site.url.parse().expect("default site url")),
+            )
+            .initialization_script(THEME_DETECT_SCRIPT);
+            if default_site.theme == "dark" {
+                default_builder = default_builder.initialization_script(THEME_FORCE_DARK_SCRIPT);
+            }
             window.add_child(
-                WebviewBuilder::new(
-                    default_site.key.clone(),
-                    WebviewUrl::External(default_site.url.parse().expect("default site url")),
-                )
-                .initialization_script(THEME_DETECT_SCRIPT)
-                .zoom_hotkeys_enabled(true),
+                default_builder.zoom_hotkeys_enabled(true),
                 sites::content_bounds(content_offset(), win_w, win_h).0,
                 sites::content_bounds(content_offset(), win_w, win_h).1,
             )?;
