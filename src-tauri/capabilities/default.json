@@ -1,15 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for ChatApp",
+  "description": "Default capability for ChatApp main window (local toolbar). Remote site URLs are injected at runtime via sites-runtime capability.",
   "windows": ["main"],
-  "remote": {
-    "urls": [
-      "https://chat.deepseek.com",
-      "https://chatglm.cn",
-      "https://zread.ai"
-    ]
-  },
+  "local": true,
   "permissions": [
     "core:default",
     "core:event:default",
