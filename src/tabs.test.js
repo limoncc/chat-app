@@ -1,36 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SITES, DEFAULT_TAB, nextActiveKey, WINDOW_ACTIONS } from "./tabs.js";
+import { nextSiteKey } from "./tabs.js";
 
-test("SITES contains three sites in tab order", () => {
-  assert.deepEqual(
-    SITES.map((s) => s.key),
-    ["deepseek", "chatglm", "zread"],
-  );
-  for (const s of SITES) {
-    assert.ok(s.key.length > 0);
-    assert.ok(s.title.length > 0);
-  }
+const SAMPLE = [
+  { key: "deepseek", title: "DeepSeek" },
+  { key: "chatglm", title: "ChatGLM" },
+  { key: "zread", title: "Zread" },
+  { key: "qianwen", title: "Qianwen" },
+];
+
+test("nextSiteKey cycles to the next site in order", () => {
+  assert.equal(nextSiteKey(SAMPLE, "deepseek"), "chatglm");
+  assert.equal(nextSiteKey(SAMPLE, "chatglm"), "zread");
+  assert.equal(nextSiteKey(SAMPLE, "zread"), "qianwen");
 });
 
-test("DEFAULT_TAB is deepseek", () => {
-  assert.equal(DEFAULT_TAB, "deepseek");
+test("nextSiteKey wraps around from the last site", () => {
+  assert.equal(nextSiteKey(SAMPLE, "qianwen"), "deepseek");
 });
 
-test("nextActiveKey switches to a known key", () => {
-  assert.equal(nextActiveKey(SITES, "deepseek", "chatglm"), "chatglm");
-  assert.equal(nextActiveKey(SITES, "chatglm", "zread"), "zread");
+test("nextSiteKey handles unknown current key by picking first", () => {
+  assert.equal(nextSiteKey(SAMPLE, "unknown"), "deepseek");
+  assert.equal(nextSiteKey(SAMPLE, ""), "deepseek");
 });
 
-test("nextActiveKey ignores unknown key and keeps current", () => {
-  assert.equal(nextActiveKey(SITES, "deepseek", "unknown"), "deepseek");
-  assert.equal(nextActiveKey(SITES, "deepseek", ""), "deepseek");
-});
-
-test("nextActiveKey ignores clicking the already-active tab", () => {
-  assert.equal(nextActiveKey(SITES, "chatglm", "chatglm"), "chatglm");
-});
-
-test("WINDOW_ACTIONS contains the three supported window controls", () => {
-  assert.deepEqual(WINDOW_ACTIONS, ["minimize", "toggle_maximize", "close"]);
+test("nextSiteKey returns current key for empty list", () => {
+  assert.equal(nextSiteKey([], "deepseek"), "deepseek");
 });

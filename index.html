@@ -13,7 +13,7 @@
       background: #1a1a2e;
       font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
     }
-    /* 顶部标签工具栏：紧贴原生标题栏下方。高度与 Rust 侧 TAB_BAR_HEIGHT
+    /* 顶部工具栏：紧贴原生标题栏下方。高度与 Rust 侧 TAB_BAR_HEIGHT
        保持一致；macOS 左侧留出红绿灯区域，Windows 无需留空。 */
     #tabbar {
       position: fixed;
@@ -31,60 +31,128 @@
       -webkit-user-select: none;
       -webkit-app-region: drag; /* 空白区域允许拖动窗口 */
     }
-    /* macOS 系统红绿灯在左上角，预留空间避免遮挡标签 */
+    /* macOS 系统红绿灯在左上角，预留空间避免遮挡控件 */
     html[data-tauri-platform="macos"] #tabbar { padding-left: 78px; }
 
-    #tabs {
+    #toolbar {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 8px;
       min-width: 0;
     }
-    .tab {
+    #site-select {
       -webkit-app-region: no-drag;
-      padding: 4px 12px;
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+    #site-select option { background: #1a1a2e; color: #fff; }
+    .btn {
+      -webkit-app-region: no-drag;
+      height: 26px;
+      padding: 0 12px;
       border: none;
       border-radius: 6px;
-      background: transparent;
-      color: rgba(255, 255, 255, 0.55);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.75);
       font-size: 12px;
-      line-height: 20px;
+      line-height: 26px;
       cursor: pointer;
       outline: none;
       white-space: nowrap;
     }
-    .tab:hover { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.85); }
-    .tab.active { background: rgba(255, 255, 255, 0.15); color: #fff; }
+    .btn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
   </style>
 </head>
 <body>
   <div id="tabbar">
-    <div id="tabs"></div>
+    <div id="toolbar">
+      <select id="site-select" title="选择站点"></select>
+      <button id="cycle-btn" class="btn" title="点击切换到下一个站点"></button>
+      <button id="settings-btn" class="btn" title="打开设置">⚙ 设置</button>
+    </div>
   </div>
   <script type="module">
     import {
-      SITES,
-      DEFAULT_TAB,
-      renderTabs,
-      updateActiveTab,
+      fetchSites,
+      nextSiteKey,
+      onSitesChanged,
+      onActiveChanged,
       activateTab,
-      windowControl,
+      openSettings,
     } from "./src/tabs.js";
 
-    const tabsEl = document.getElementById("tabs");
-    let active = DEFAULT_TAB;
+    const selectEl = document.getElementById("site-select");
+    const cycleBtn = document.getElementById("cycle-btn");
+    const settingsBtn = document.getElementById("settings-btn");
 
-    renderTabs(tabsEl, SITES, active, async (key) => {
-      if (key === active) return;
-      const res = await activateTab(key);
-      if (res.ok) active = key;
-      updateActiveTab(tabsEl, active);
+    let sites = [];
+    let active = "";
+
+    // 用当前站点列表重绘下拉与循环按钮文字。
+    function updateUI() {
+      selectEl.replaceChildren(
+        ...sites.map((s) => {
+          const opt = document.createElement("option");
+          opt.value = s.key;
+          opt.textContent = s.title;
+          return opt;
+        }),
+      );
+      selectEl.value = active;
+      const cur = sites.find((s) => s.key === active);
+      cycleBtn.textContent = cur ? cur.title : "";
+    }
+
+    async function boot() {
+      const cfg = await fetchSites();
+      sites = cfg.sites;
+      active = sites.some((s) => s.key === cfg.default_key)
+        ? cfg.default_key
+        : (sites[0]?.key ?? "");
+      updateUI();
+
+      // 站点配置变更（设置界面增删改/排序）：重绘。
+      onSitesChanged((cfg2) => {
+        sites = cfg2.sites;
+        if (!sites.some((s) => s.key === active)) active = cfg2.default_key;
+        updateUI();
+      });
+
+      // 当前激活站点变更（任意切换路径）：同步显示。
+      onActiveChanged((key) => {
+        active = key;
+        updateUI();
+      });
+    }
+
+    selectEl.addEventListener("change", () => {
+      const key = selectEl.value;
+      if (!key || key === active) return;
+      activateTab(key).then((res) => {
+        if (res.ok) active = key;
+        updateUI();
+      });
     });
 
-    // 双击工具栏空白处最大化/还原，与原生标题栏行为一致。
-    document.getElementById("tabbar").addEventListener("dblclick", (e) => {
-      if (e.target.id === "tabbar") windowControl("toggle_maximize");
+    cycleBtn.addEventListener("click", () => {
+      const key = nextSiteKey(sites, active);
+      if (!key || key === active) return;
+      activateTab(key).then((res) => {
+        if (res.ok) active = key;
+        updateUI();
+      });
     });
+
+    settingsBtn.addEventListener("click", () => openSettings());
+
+    boot();
   </script>
 </body>
 </html>

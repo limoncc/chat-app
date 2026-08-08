@@ -1,41 +1,29 @@
-// 标签栏纯逻辑 + 渲染。站点列表需与 Rust 侧 src-tauri/src/sites.rs 保持一致。
-export const SITES = [
-  { key: "deepseek", title: "DeepSeek" },
-  { key: "chatglm", title: "ChatGLM" },
-  { key: "zread", title: "Zread" },
-];
+// 工具栏纯逻辑 + IPC。站点列表通过 IPC 从 Rust 配置读取（配置式，与 sites.rs 的 SiteStore 对应）。
 
-export const DEFAULT_TAB = "deepseek";
-
-// 点击标签后的新激活 key；非法 key 保持当前，避免 UI 与后端不一致。
-export function nextActiveKey(tabs, currentKey, clickedKey) {
-  if (!tabs.some((t) => t.key === clickedKey)) return currentKey;
-  return clickedKey;
+// 循环切换：返回当前站点在站点列表中的下一个 key（顺序循环；列表为空或找不到时保持当前）。
+export function nextSiteKey(sites, currentKey) {
+  if (sites.length === 0) return currentKey;
+  const idx = sites.findIndex((s) => s.key === currentKey);
+  if (idx === -1) return sites[0].key;
+  return sites[(idx + 1) % sites.length].key;
 }
 
-// 创建单个标签按钮。
-export function createTabEl(site, activeKey, onClick) {
-  const el = document.createElement("button");
-  el.className = "tab" + (site.key === activeKey ? " active" : "");
-  el.dataset.key = site.key;
-  el.textContent = site.title;
-  el.addEventListener("click", () => onClick(site.key));
-  return el;
+// 通过 IPC 获取站点配置（{ version, default_key, sites: [{key,url,title,theme}] }）。
+export async function fetchSites() {
+  return await window.__TAURI_INTERNALS__.invoke("get_sites");
 }
 
-// 渲染整个标签栏。
-export function renderTabs(container, sites, activeKey, onClick) {
-  container.replaceChildren(...sites.map((s) => createTabEl(s, activeKey, onClick)));
+// 订阅站点配置变更（设置界面增删改/排序后触发）。
+export function onSitesChanged(handler) {
+  listen("sites-changed", (payload) => handler(payload));
 }
 
-// 仅更新激活态 class（切换后调用，避免整栏重渲染丢失点击事件）。
-export function updateActiveTab(container, activeKey) {
-  container.querySelectorAll(".tab").forEach((el) => {
-    el.classList.toggle("active", el.dataset.key === activeKey);
-  });
+// 订阅当前激活站点变更（切换站点后触发）。
+export function onActiveChanged(handler) {
+  listen("active-changed", (payload) => handler(payload));
 }
 
-// 通过 IPC 请求后端切换标签。
+// 通过 IPC 请求后端切换站点。
 export async function activateTab(key) {
   try {
     await window.__TAURI_INTERNALS__.invoke("activate_tab", { tab: key });
@@ -45,18 +33,22 @@ export async function activateTab(key) {
   }
 }
 
-// 自定义工具栏支持的窗口操作（与 Rust 侧 window_control 保持一致）。
-export const WINDOW_ACTIONS = ["minimize", "toggle_maximize", "close"];
-
-// 通过 IPC 请求窗口操作（最小化 / 最大化切换 / 关闭到托盘）。
-export async function windowControl(action) {
-  if (!WINDOW_ACTIONS.includes(action)) {
-    return { ok: false, action, error: "unknown action" };
-  }
+// 打开设置窗口。
+export async function openSettings() {
   try {
-    await window.__TAURI_INTERNALS__.invoke("window_control", { action });
-    return { ok: true, action };
+    await window.__TAURI_INTERNALS__.invoke("open_settings");
+    return { ok: true };
   } catch (e) {
-    return { ok: false, action, error: String(e) };
+    return { ok: false, error: String(e) };
+  }
+}
+
+// Tauri 事件监听封装（无 @tauri-apps/api 依赖，直接用 internals）。
+function listen(event, handler) {
+  if (
+    window.__TAURI_INTERNALS__ &&
+    typeof window.__TAURI_INTERNALS__.listen === "function"
+  ) {
+    window.__TAURI_INTERNALS__.listen(event, (e) => handler(e.payload));
   }
 }
