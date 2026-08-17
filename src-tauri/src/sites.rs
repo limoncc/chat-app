@@ -81,8 +81,8 @@ pub fn validate_site(site: &Site) -> Result<(), String> {
         .url
         .parse::<tauri::Url>()
         .map_err(|_| format!("无效 URL: {}", site.url))?;
-    if url.scheme() != "https" {
-        return Err(format!("URL 必须为 https: {}", site.url));
+    if url.scheme() != "https" && url.scheme() != "http" {
+        return Err(format!("URL 必须为 http 或 https: {}", site.url));
     }
     if site.title.trim().is_empty() {
         return Err(format!("站点 {} 的 title 不能为空", site.key));
@@ -312,9 +312,18 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_http_url() {
+    fn validate_accepts_http_and_https() {
         let mut cfg = default_config();
-        cfg.sites[0].url = "http://example.com".into();
+        cfg.sites[0].url = "http://127.0.0.1:3080".into();
+        assert!(validate_config(&cfg).is_ok());
+        cfg.sites[0].url = "https://example.com".into();
+        assert!(validate_config(&cfg).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_other_scheme() {
+        let mut cfg = default_config();
+        cfg.sites[0].url = "ftp://example.com".into();
         assert!(validate_config(&cfg).is_err());
     }
 
