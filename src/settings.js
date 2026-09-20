@@ -23,12 +23,14 @@ export function initSettings(document, fetchSites, onSitesChanged) {
   };
 
   // 按新顺序重排（把 from 位置的 key 移到 to）。
+  // 各操作成功后直接用命令返回的新配置刷新，事件订阅仅作兜底。
   async function reorder(from, to) {
     const keys = cfg.sites.map((s) => s.key);
     const [k] = keys.splice(from, 1);
     keys.splice(to, 0, k);
     try {
-      await invoke("reorder_sites", { keys });
+      cfg = await invoke("reorder_sites", { keys });
+      render();
     } catch (e) {
       showError(String(e));
     }
@@ -60,7 +62,8 @@ export function initSettings(document, fetchSites, onSitesChanged) {
           url: inputs[1].value.trim(),
         };
         try {
-          await invoke("update_site", { key: site.key, site: updated });
+          cfg = await invoke("update_site", { key: site.key, site: updated });
+          render();
         } catch (e) {
           showError(String(e));
         }
@@ -113,7 +116,8 @@ export function initSettings(document, fetchSites, onSitesChanged) {
         theme.value = s.theme;
         theme.addEventListener("change", async () => {
           try {
-            await invoke("update_site", { key: s.key, site: { ...s, theme: theme.value } });
+            cfg = await invoke("update_site", { key: s.key, site: { ...s, theme: theme.value } });
+            render();
           } catch (e) {
             showError(String(e));
           }
@@ -128,7 +132,8 @@ export function initSettings(document, fetchSites, onSitesChanged) {
           btn("删除", "", async () => {
             if (!confirm(`确定删除 ${s.title}？`)) return;
             try {
-              await invoke("remove_site", { key: s.key });
+              cfg = await invoke("remove_site", { key: s.key });
+              render();
             } catch (e) {
               showError(String(e));
             }
@@ -153,9 +158,10 @@ export function initSettings(document, fetchSites, onSitesChanged) {
       return;
     }
     try {
-      await invoke("add_site", { site: { key, url, title, theme } });
+      cfg = await invoke("add_site", { site: { key, url, title, theme } });
       form.reset();
       document.getElementById("f-theme").value = "dark";
+      render();
     } catch (err) {
       showError(String(err));
     }
@@ -164,7 +170,8 @@ export function initSettings(document, fetchSites, onSitesChanged) {
   // 默认站点变更
   defaultSelect.addEventListener("change", async () => {
     try {
-      await invoke("set_default", { key: defaultSelect.value });
+      cfg = await invoke("set_default", { key: defaultSelect.value });
+      render();
     } catch (e) {
       showError(String(e));
     }

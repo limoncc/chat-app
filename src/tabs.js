@@ -44,11 +44,20 @@ export async function openSettings() {
 }
 
 // Tauri 事件监听封装（无 @tauri-apps/api 依赖，直接用 internals）。
+// __TAURI_INTERNALS__ 上没有 listen 方法，须注册 transformCallback 回调后
+// 调 event 插件的 plugin:event|listen 命令订阅（与 @tauri-apps/api 实现一致）。
 function listen(event, handler) {
-  if (
-    window.__TAURI_INTERNALS__ &&
-    typeof window.__TAURI_INTERNALS__.listen === "function"
-  ) {
-    window.__TAURI_INTERNALS__.listen(event, (e) => handler(e.payload));
+  const internals = window.__TAURI_INTERNALS__;
+  if (!internals || typeof internals.invoke !== "function") return;
+  try {
+    internals
+      .invoke("plugin:event|listen", {
+        event,
+        target: { kind: "Any" },
+        handler: internals.transformCallback((e) => handler(e.payload)),
+      })
+      .catch(() => {});
+  } catch {
+    // webview 上下文未就绪时静默
   }
 }
