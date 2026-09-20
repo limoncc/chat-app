@@ -19,9 +19,6 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install NSIS
-        run: choco install nsis -y
-
       - name: Install dependencies
         run: npm install
 

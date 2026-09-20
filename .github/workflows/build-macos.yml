@@ -41,16 +41,16 @@ jobs:
 
       - name: Ad-hoc sign and recreate DMG
         run: |
-          APP="src-tauri/target/release/bundle/macos/DeepSeek.app"
+          APP="src-tauri/target/release/bundle/macos/ChatApp.app"
           codesign --force --deep --sign - "$APP"
           hdiutil create \
-            -volname "DeepSeek" \
+            -volname "ChatApp" \
             -srcfolder "$APP" \
             -ov -format UDZO \
-            "DeepSeek_${{ matrix.artifact }}.dmg"
+            "ChatApp_${{ matrix.artifact }}.dmg"
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: DeepSeek_${{ matrix.artifact }}.dmg
+          path: ChatApp_${{ matrix.artifact }}.dmg
