@@ -176,7 +176,8 @@ fn switch_tab(app: &tauri::AppHandle, tab: &str) -> Result<(), String> {
 
 /// Tauri command: called from the tab bar (local page, non-macOS platforms)
 /// when the user clicks a tab.
-#[tauri::command]
+/// async：Windows/WebView2 上同步 command 内创建 webview（switch_tab 懒建）会死锁。
+#[tauri::command(async)]
 fn activate_tab(app: tauri::AppHandle, tab: String) -> Result<(), String> {
     switch_tab(&app, &tab)
 }
@@ -285,7 +286,8 @@ fn update_site(
 }
 
 /// Tauri command: 删除站点；若删除的是当前激活站点则切到新默认。
-#[tauri::command]
+/// async：删除默认站点时经 switch_tab 懒建 webview，同 activate_tab 的死锁规避。
+#[tauri::command(async)]
 fn remove_site(
     app: tauri::AppHandle,
     key: String,
@@ -325,7 +327,8 @@ fn set_default(
 }
 
 /// Tauri command: 打开设置窗口（标题栏/工具栏设置按钮、托盘、菜单共用入口）。
-#[tauri::command]
+/// async：Windows/WebView2 上同步 command 内创建窗口（WebviewWindowBuilder）会死锁。
+#[tauri::command(async)]
 fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
     open_settings_window(&app)
 }
@@ -471,7 +474,11 @@ pub fn run() {
         .on_menu_event(move |app, event| {
             match event.id().as_ref() {
                 "settings" => {
-                    let _ = open_settings_window(app);
+                    // Windows/WebView2：事件回调内创建窗口会死锁，挪到独立任务。
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = open_settings_window(&app);
+                    });
                 }
                 "quit" => app.exit(0),
                 _ => {
@@ -661,7 +668,11 @@ pub fn run() {
                         }
                     }
                     "settings" => {
-                        let _ = open_settings_window(app);
+                        // Windows/WebView2：事件回调内创建窗口会死锁，挪到独立任务。
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = open_settings_window(&app);
+                        });
                     }
                     "quit" => app.exit(0),
                     _ => {}
