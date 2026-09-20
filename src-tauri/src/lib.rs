@@ -696,18 +696,19 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
+        // `_` 前缀：非 macOS 下此闭包体为空，避免 unused variable 报错。
+        .run(|_app, _event| {
             #[cfg(target_os = "macos")]
-            match event {
+            match _event {
                 // App fully launched, window is ready: native titlebar tab
                 // buttons must be added here (adding earlier has no effect).
                 RunEvent::Ready => {
-                    if let Some(w) = app.get_window("main") {
+                    if let Some(w) = _app.get_window("main") {
                         let _ = mac_titlebar::setup(&w);
                     }
                 }
                 RunEvent::Reopen { .. } => {
-                    if let Some(w) = app.get_window("main") {
+                    if let Some(w) = _app.get_window("main") {
                         let _ = w.show();
                         let _ = w.set_focus();
                     }
