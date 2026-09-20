@@ -13,9 +13,9 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-14
             artifact: macos-arm64
-          - target: x86_64-apple-darwin
-            os: macos-13
-            artifact: macos-x64
+          # - target: x86_64-apple-darwin
+          #   os: macos-13
+          #   artifact: macos-x64
 
     runs-on: ${{ matrix.os }}
 
