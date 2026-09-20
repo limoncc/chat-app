@@ -37,6 +37,7 @@ export function initSettings(document, fetchSites, onSitesChanged) {
   }
 
   // 行内编辑：把 info 区域换成 title/url 输入框，操作区换成保存/取消。
+  // key 是 webview label（牵涉会话保持），设计上不可改，编辑态仅只读展示。
   function editRow(li, site) {
     const info = li.querySelector(".info");
     info.replaceChildren(
@@ -49,6 +50,12 @@ export function initSettings(document, fetchSites, onSitesChanged) {
         const u = document.createElement("input");
         u.value = site.url;
         return u;
+      })(),
+      (() => {
+        const m = document.createElement("span");
+        m.className = "meta";
+        m.textContent = `标识 ${site.key}（不可修改）`;
+        return m;
       })(),
     );
 
@@ -102,7 +109,7 @@ export function initSettings(document, fetchSites, onSitesChanged) {
         title.textContent = s.title;
         const meta = document.createElement("span");
         meta.className = "meta";
-        meta.textContent = `${s.key} · ${s.url}`;
+        meta.textContent = `标识 ${s.key} · ${s.url}`;
         info.append(title, meta);
 
         const theme = document.createElement("select");
