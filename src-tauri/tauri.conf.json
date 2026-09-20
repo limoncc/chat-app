@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickfarrow/tauri-docs/refs/heads/main/src/content/gen/tauri-v2-schema.json",
   "productName": "ChatApp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "com.chatapp.desktop",
   "build": {
     "frontendDist": "../dist",
