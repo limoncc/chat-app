@@ -129,14 +129,29 @@ export function initSettings(document, fetchSites, onSitesChanged) {
           btn("↑", "", () => i > 0 && reorder(i, i - 1)),
           btn("↓", "", () => i < cfg.sites.length - 1 && reorder(i, i + 1)),
           btn("编辑", "", () => editRow(li, s)),
-          btn("删除", "", async () => {
-            if (!confirm(`确定删除 ${s.title}？`)) return;
-            try {
-              cfg = await invoke("remove_site", { key: s.key });
-              render();
-            } catch (e) {
-              showError(String(e));
+          // 删除用行内二次确认：WKWebView（macOS）下 window.confirm 不弹窗且
+          // 恒返回 undefined，会静默拦截删除流程。
+          btn("删除", "", (ev) => {
+            const b = ev.currentTarget;
+            if (b.dataset.armed !== "1") {
+              b.dataset.armed = "1";
+              b.textContent = "确认删除";
+              b.classList.add("danger");
+              setTimeout(() => {
+                if (b.isConnected && b.dataset.armed === "1") {
+                  b.dataset.armed = "";
+                  b.textContent = "删除";
+                  b.classList.remove("danger");
+                }
+              }, 3000);
+              return;
             }
+            invoke("remove_site", { key: s.key })
+              .then((c) => {
+                cfg = c;
+                render();
+              })
+              .catch((e) => showError(String(e)));
           }),
         );
 
